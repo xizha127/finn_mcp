@@ -15,8 +15,9 @@ test("MCP stdio exposes schemas, validates input, and returns search counts", { 
   try {
     await client.connect(transport);
     const { tools } = await client.listTools();
-    assert.equal(tools.length, 10);
+    assert.equal(tools.length, 11);
     const search = tools.find((tool) => tool.name === "search_finn_torget");
+    assert.ok(tools.some((tool) => tool.name === "search_finn_eiendom"));
     assert.equal(search.inputSchema.properties.shipping.type, "boolean");
     assert.equal(search.inputSchema.properties.condition.type, "array");
     const result = await client.callTool({

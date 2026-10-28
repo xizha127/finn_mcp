@@ -20,6 +20,14 @@ A Model Context Protocol (MCP) server for searching and browsing Norwegian marke
 - **Destination autocomplete** to discover locations and result counts
 - **Property details** including pricing, beds, facilities, house rules, and images
 
+### FINN.no Eiendom (real estate)
+- **Search** homes for sale, rentals, newbuildings, and plots
+- **Filters** for asking price, total price, area, plot area, bedrooms, construction year,
+  property type, ownership type, facilities, energy label, sales status, location,
+  viewing date, and listings published today
+- **Listings** include asking price, total price, monthly shared cost, area, bedrooms,
+  property type, ownership type, broker, viewing times, coordinates, images, and URL
+
 ### Klarna Price Guide (prisguiden.no)
 - **Search** for new products across Norwegian retailers with lowest prices and price drop alerts
 - **Product details** with individual offers, stock status, shipping, delivery estimates, purchase links, and price trend data
@@ -37,6 +45,8 @@ node src/cli.js search_finn_torget --help
 node src/cli.js search_finn_torget --query "harrington" --price_to 1500 --shipping
 node src/cli.js get_finn_torget_item --finn_code 343932826
 node src/cli.js search_finn_cars --fuel Elektrisk --price_to 300000
+node src/cli.js search_finn_eiendom --query "leilighet oslo" --price_to 5000000 --bedrooms_from 2
+node src/cli.js search_finn_eiendom --subvertical lettings --query "bergen" --price_to 20000
 node src/cli.js search_klarna --query "FiiO K11"
 ```
 
@@ -103,12 +113,14 @@ Config file locations:
 - "Find electric cars under 300k on FINN"
 - "Search for cabincruiser boats over 25 feet"
 - "Find holiday cabins in Lofoten"
+- "Find 3-bedroom apartments in Oslo under 5 million NOK"
+- "Search for houses for rent in Bergen"
 - "Compare prices for Raspberry Pi 4 on Klarna"
 - "Get details for FINN item 343932826"
 
 ## Search result counts
 
-FINN searches (Torget, cars, boats, and B2B) return:
+FINN searches (Torget, cars, boats, B2B, and Eiendom) return:
 
 - `total_results`: total matches reported by FINN, across pages.
 - `page`: current page reported by FINN.
@@ -119,6 +131,24 @@ Missing or invalid pagination metadata is `null`; it is never inferred from the 
 Klarna searches return `results_on_page` only, since the parsed payload provides no verified total.
 These fields apply to both the CLI and MCP. Consumers that previously used `total_results`
 as a page count should use `results_on_page` instead.
+
+## Eiendom listings
+
+`search_finn_eiendom` returns `price` (asking price), `total_price`, and
+`monthly_shared_cost` as `{ "amount": 3700000, "currency": "NOK" }` or `null` when FINN
+does not report the value. `area` is `{ "from": 65, "to": 65, "unit": "m²" }`, and
+`plot_area` is `{ "size": 624, "unit": "m²" }` or `null`.
+
+The default subvertical is `homes` (bolig til salgs). Use `lettings` for rentals, where
+`price` is the monthly rent; `newbuildings` for nybygg; or `plots` for tomter. Sort values
+and some filters are subvertical-specific. Property type, ownership type, energy label,
+sales status, and facilities accept either the FINN code or the Norwegian display name;
+unsupported filters are passed to FINN unchanged.
+
+The Eiendom search page embeds a React Router turbo-stream payload rather than the
+base64 search data used by Torget and mobility. The parser decodes that payload and
+rejects pages without a recognised search result, matching the failure behaviour of the
+other FINN search tools.
 
 ## Offer prices and availability
 
