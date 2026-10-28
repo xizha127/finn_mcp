@@ -26,6 +26,18 @@ test("CLI discovers tools and describes their parameters", () => {
   assert.match(help.stdout, /repeatable/);
 });
 
+test("CLI exposes property details and removal status through the shared handler", () => {
+  const args = ["get_finn_eiendom_item", "--finn_code", "123456789"];
+  const result = run(args, { status: 200, fixture: "test/fixtures/eiendom-detail.html" });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(JSON.parse(result.stdout).monthly_rent.amount, 11000);
+  const missing = run(args, { status: 404, body: "Not found" });
+  assert.equal(missing.status, 0, missing.stderr);
+  assert.equal(JSON.parse(missing.stdout).status, "removed");
+  const invalid = run(["get_finn_eiendom_item", "--finn_code", "../oops"]);
+  assert.equal(invalid.status, 1);
+});
+
 test("CLI flags and JSON produce identical results through the marketplace handler", () => {
   const flags = run([
     "search_finn_torget",

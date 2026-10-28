@@ -2,6 +2,10 @@
 
 A Model Context Protocol (MCP) server for searching and browsing Norwegian marketplaces — FINN.no and Klarna Price Guide.
 
+This fork combines [viktorfa/finn_mcp](https://github.com/viktorfa/finn_mcp) with
+[gormrs's Eiendom search](https://github.com/gormrs/finn_mcp) and adds individual
+property details and listing-status checks.
+
 ## Features
 
 ### FINN.no Torget (secondhand marketplace)
@@ -21,6 +25,8 @@ A Model Context Protocol (MCP) server for searching and browsing Norwegian marke
 - **Property details** including pricing, beds, facilities, house rules, and images
 
 ### FINN.no Eiendom (real estate)
+- **Individual ad details and status** with full description, pricing, deposit,
+  included costs, key info, facilities, images, last edit and check timestamps
 - **Search** homes for sale, rentals, newbuildings, and plots
 - **Filters** for asking price, total price, area, plot area, bedrooms, construction year,
   property type, ownership type, facilities, energy label, sales status, location,
@@ -47,6 +53,7 @@ node src/cli.js get_finn_torget_item --finn_code 343932826
 node src/cli.js search_finn_cars --fuel Elektrisk --price_to 300000
 node src/cli.js search_finn_eiendom --query "leilighet oslo" --price_to 5000000 --bedrooms_from 2
 node src/cli.js search_finn_eiendom --subvertical lettings --query "bergen" --price_to 20000
+node src/cli.js get_finn_eiendom_item --finn_code 177871687
 node src/cli.js search_klarna --query "FiiO K11"
 ```
 
@@ -71,7 +78,7 @@ Add to `.mcp.json` in your project root (or `~/.claude/.mcp.json` for global acc
     "finn-mcp": {
       "type": "stdio",
       "command": "npx",
-      "args": ["github:viktorfa/finn_mcp"]
+      "args": ["github:xizha127/finn_mcp"]
     }
   }
 }
@@ -81,10 +88,10 @@ Add to `.mcp.json` in your project root (or `~/.claude/.mcp.json` for global acc
 
 ```bash
 # bunx
-"command": "bunx", "args": ["github:viktorfa/finn_mcp"]
+"command": "bunx", "args": ["github:xizha127/finn_mcp"]
 
 # pnpm dlx
-"command": "pnpm", "args": ["dlx", "github:viktorfa/finn_mcp"]
+"command": "pnpm", "args": ["dlx", "github:xizha127/finn_mcp"]
 ```
 
 ### Claude Desktop
@@ -96,7 +103,7 @@ Add to your Claude Desktop config and restart Claude.
   "mcpServers": {
     "finn-mcp": {
       "command": "npx",
-      "args": ["github:viktorfa/finn_mcp"]
+      "args": ["github:xizha127/finn_mcp"]
     }
   }
 }
@@ -150,6 +157,42 @@ base64 search data used by Torget and mobility. The parser decodes that payload 
 rejects pages without a recognised search result, matching the failure behaviour of the
 other FINN search tools.
 
+### Individual property details and status
+
+`get_finn_eiendom_item` fetches the **full ad**, rather than a search card. Supply
+a numeric `finn_code`; `subvertical` defaults to `lettings` and also supports
+`homes`, `newbuildings`, and `plots`. Both CLI and MCP use the same handler.
+
+```bash
+node src/cli.js get_finn_eiendom_item --finn_code 177871687
+node src/cli.js get_finn_eiendom_item --finn_code 423735924 --subvertical homes
+```
+
+The result contains `checked_at` (UTC), `http_status`, the requested and final URL,
+and `status_evidence`. Status meanings:
+
+| Status | Evidence |
+| --- | --- |
+| `active` | Recognised ad with the requested FINN code and no inactive status badge. Availability remains unconfirmed. |
+| `rented` | Explicit **Utleid** badge on this ad. |
+| `sold` | Explicit **Solgt** badge on this ad. |
+| `inactive` | Explicit **Inaktiv** badge. |
+| `removed` | HTTP **404/410**. The removal reason is unknown; this does not establish that it was rented or sold. |
+| `unknown` | Recognised ad with an unrecognised status badge. |
+
+`availability_confirmed` is `false` for rented/sold/inactive and `null` otherwise.
+It is never inferred to be `true` from a visible page. Network failures, access
+denials, rate limits and unrecognised or mismatched HTTP-200 pages are tool errors,
+not removal or rental statuses. The parser scopes status to the ad's badge;
+mentions in descriptions, promotions and recommended listings do not determine it.
+
+`monthly_rent` and `deposit` contain exact NOK amounts or `null`; raw `pricing`
+preserves conditional amounts and other price labels. The generic Qasa promotion
+does not replace the advertised deposit. `key_info` retains all advertised area
+definitions and original Norwegian labels. `description` includes all server-rendered
+description text, including visually collapsed content. Interpret pets, parking and
+lease conditions from that text; the tool does not guess missing terms.
+
 ## Offer prices and availability
 
 `get_klarna_product` returns an `offers` array from the offers embedded in the page,
@@ -181,7 +224,7 @@ success. Klarna product pages also require recognised product and offer data.
 ## Development
 
 ```bash
-git clone https://github.com/viktorfa/finn_mcp.git
+git clone https://github.com/xizha127/finn_mcp.git
 cd finn_mcp
 pnpm install
 pnpm run dev

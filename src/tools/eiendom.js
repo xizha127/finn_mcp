@@ -1,6 +1,7 @@
 import { z } from "zod";
+import { parseEiendomDetail } from "../eiendom-detail-parse.js";
 import { parseEiendomSearchPage } from "../eiendom-parse.js";
-import { fetchHtml } from "../fetch.js";
+import { fetchHtml, fetchHtmlResponse } from "../fetch.js";
 
 const SORT_VALUES = [
   "RELEVANCE",
@@ -147,6 +148,57 @@ async function searchEiendom(args) {
 }
 
 export function registerEiendomTools(server) {
+  server.registerTool(
+    "get_finn_eiendom_item",
+    {
+      description:
+        "Read an individual FINN property ad, including its full description, pricing, deposit, included costs, " +
+        "key info, facilities and images. Check explicit Utleid/Solgt/Inaktiv badges and HTTP 404/410 removal. " +
+        "An active page does not confirm availability; a missing page does not mean rented. " +
+        "Returns checked_at and status_evidence. Fetch/parse errors are tool errors, never rented/removed statuses.",
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      inputSchema: {
+        finn_code: z.string().regex(/^\d+$/u).describe("Numeric FINN-kode of the property ad"),
+        subvertical: z
+          .enum(["homes", "lettings", "newbuildings", "plots"])
+          .optional()
+          .describe("Property type, defaults to lettings (rentals)"),
+      },
+    },
+    async (args) => {
+      try {
+        const url = `https://www.finn.no/realestate/${args.subvertical ?? "lettings"}/ad.html?finnkode=${args.finn_code}`;
+        const page = await fetchHtmlResponse(url);
+        const metadata = {
+          finn_code: args.finn_code,
+          requested_url: url,
+          url: page.url,
+          http_status: page.http_status,
+          checked_at: new Date().toISOString(),
+        };
+        let details;
+        if (page.http_status === 404 || page.http_status === 410) {
+          details = {
+            status: "removed",
+            status_evidence: [`HTTP ${page.http_status}; the reason for removal is unknown`],
+            availability_confirmed: null,
+          };
+        } else {
+          if (page.http_status < 200 || page.http_status >= 300) {
+            throw new Error(`HTTP error! status: ${page.http_status}`);
+          }
+          details = parseEiendomDetail(page.html, args.finn_code);
+        }
+        return { content: [{ type: "text", text: JSON.stringify({ ...metadata, ...details }, null, 2) }] };
+      } catch (error) {
+        return {
+          content: [{ type: "text", text: `Error fetching FINN eiendom item: ${error.message}` }],
+          isError: true,
+        };
+      }
+    },
+  );
+
   server.registerTool(
     "search_finn_eiendom",
     {
